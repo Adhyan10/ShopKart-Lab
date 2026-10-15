@@ -1,17 +1,25 @@
 const mongoose = require("mongoose");
 
-const connectDB = async () => {
+// Cache the connection promise so serverless invocations reuse it.
+let connectionPromise = null;
+
+const connectDB = () => {
   if (!process.env.MONGO_URI) {
-    console.error("MONGO_URI is missing in .env");
-    process.exit(1);
+    return Promise.reject(new Error("MONGO_URI is not configured"));
   }
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("MongoDB connected");
-  } catch (err) {
-    console.error("MongoDB connection failed:", err.message);
-    process.exit(1);
+  if (!connectionPromise) {
+    connectionPromise = mongoose
+      .connect(process.env.MONGO_URI)
+      .then((conn) => {
+        console.log("MongoDB connected");
+        return conn;
+      })
+      .catch((err) => {
+        connectionPromise = null; // allow retry on next request
+        throw err;
+      });
   }
+  return connectionPromise;
 };
 
 module.exports = connectDB;
